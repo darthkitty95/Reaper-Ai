@@ -33,4 +33,17 @@ class Patcher:
             self.knowledge.add_example(diagnostic, patch_text)
         except Exception as e:
             print(f"[patcher] application failed: {e}")
+import base64
+
+def obfuscate_asset(code_text):
+    # Simple XOR obfuscation with a key
+    key = "stealth_key"
+    xor_output = "".join(chr(ord(c) ^ ord(key[i % len(key)])) for i, c in enumerate(code_text))
+    return base64.b64encode(xor_output.encode()).decode()
+
+def deobfuscate_for_execution(obfuscated_text):
+    # Deobfuscates right before the interpreter runs it
+    key = "stealth_key"
+    decoded = base64.b64decode(obfuscated_text).decode()
+    return "".join(chr(ord(c) ^ ord(key[i % len(key)])) for i, c in enumerate(decoded))
 
