@@ -1,0 +1,33 @@
+Input Data Method: "The Learning Loop"
+
+import json
+from agent_knowledge import KnowledgeStore
+
+def learn_from_data(json_file_path, knowledge_db_path):
+    """
+    Ingests external patterns into the AI's Knowledge Store.
+    """
+    db = KnowledgeStore(db_path=knowledge_db_path)
+    
+    with open(json_file_path, 'r') as f:
+        data = json.load(f)
+    
+    # Ingest each pattern as a 'knowledge example'
+    for item in data.get("knowledge", []):
+        # We format the pattern as a 'diagnostic' and the code as the 'patch'
+        fake_diagnostic = {
+            "file": "template",
+            "line": 0,
+            "message": item["patterns"][0], # Uses the main keyword
+            "tool": "knowledge_ingest"
+        }
+        
+        db.add_example(
+            diagnostic=fake_diagnostic, 
+            patch=item.get("code", item.get("response")),
+            metadata={"category": item.get("category"), "source": "manual_ingest"}
+        )
+    print(f"AI has learned {len(data['knowledge'])} new patterns.")
+
+# Usage:
+# learn_from_data("local-ai-knowledge-1769827095192.json", "./agent_data/knowledge.db")
