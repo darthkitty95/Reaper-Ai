@@ -132,3 +132,94 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+    import os
+import subprocess
+import json
+import asyncio
+import aiohttp
+import nmap3
+from datetime import datetime
+
+class IntegratedSecuritySuite:
+    def __init__(self, target="127.0.0.1"):
+        self.target = target
+        self.report = {
+            "timestamp": datetime.now().isoformat(),
+            "hardening": [],
+            "recon_results": {},
+            "vulnerabilities": []
+        }
+
+    # === BLUE TEAM: HARDENING & FIREWALL ===
+    def apply_defense(self):
+        """Integrates Kernel Hardening and Firewall Rules"""
+        if os.getuid() != 0:
+            print("[!] Skipping Hardening: Root privileges required.")
+            return
+
+        print("[*] Applying Kernel Security & Firewall...")
+        # Kernel Logic
+        params = {"kernel.randomize_va_space": "2", "net.ipv4.tcp_syncookies": "1"}
+        for p, v in params.items():
+            subprocess.run(["sysctl", "-w", f"{p}={v}"], capture_output=True)
+        
+        # Firewall Logic (nftables)
+        fw_script = [
+            "nft flush ruleset",
+            "nft add table inet filter",
+            "nft add chain inet filter input { type filter hook input priority 0 ; policy drop ; }",
+            "nft add rule inet filter input ct state established,related accept"
+        ]
+        for cmd in fw_script:
+            subprocess.run(cmd, shell=True)
+        self.report["hardening"].append("Kernel hardened and Firewall set to Default Deny.")
+
+    # === RED TEAM: RECON & VULN SCANNING ===
+    async def run_offensive_suite(self):
+        """Integrates Nmap Recon and Web Vulnerability Probing"""
+        print(f"[*] Starting Recon/Attack Phase on {self.target}...")
+        
+        # 1. Nmap Recon
+        nmap = nmap3.NmapHostDiscovery()
+        try:
+            self.report["recon_results"] = nmap.nmap_portscan_only(self.target)
+        except:
+            print("[-] Nmap scan failed. Ensure nmap is installed.")
+
+        # 2. Web Vulnerability (The "Modern CVE" Logic)
+        async with aiohttp.ClientSession() as session:
+            paths = ["/.env", "/api/v1/debug?cmd=id"]
+            for path in paths:
+                try:
+                    async with session.get(f"http://{self.target}{path}", timeout=2) as resp:
+                        if resp.status == 200:
+                            body = await resp.text()
+                            status = "EXPOSED"
+                            if "uid=" in body: status = "CRITICAL: RCE VULNERABILITY"
+                            self.report["vulnerabilities"].append({"path": path, "result": status})
+                except: continue
+
+    # === REPORTING ===
+    def finalize(self):
+        filename = f"security_log_{datetime.now().strftime('%Y%m%d')}.json"
+        with open(filename, 'w') as f:
+            json.dump(self.report, f, indent=4)
+        print(f"\n[+] Suite Execution Finished. Report saved to {filename}")
+
+# --- MAIN EXECUTION ---
+async def main():
+    suite = IntegratedSecuritySuite(target="127.0.0.1") # Set your target here
+    
+    # 1. Harden the system (Blue)
+    suite.apply_defense()
+    
+    # 2. Run offensive tools (Red)
+    await suite.run_offensive_suite()
+    
+    # 3. Save everything
+    suite.finalize()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+
