@@ -1,0 +1,51 @@
+master_llm_data/
+├── agent_logic/            # (Core Python backend)
+├── security_ops/           # Kali Linux Tool Data & Handbooks
+│   ├── reconnaissance/     # nmap, subfinder, theHarvester
+│   ├── exploitation/       # metasploit, sqlmap, beef
+│   ├── password_attacks/   # hashcat, john, hydra
+│   └── wireless/           # aircrack-ng, wifite
+├── knowledge_base/         # (SQLite & JSON Knowledge)
+└── docs/                   # (LLM.swift & Kali documentation)
+
+
+import json
+from agent_knowledge import KnowledgeStore
+
+def ingest_kali_tools(tool_data_path, knowledge_db_path):
+    """
+    Injects Kali Linux tool syntax and security patterns into the AI.
+    """
+    db = KnowledgeStore(db_path=knowledge_db_path)
+    
+    with open(tool_data_path, 'r') as f:
+        kali_repo = json.load(f)
+    
+    for tool in kali_repo.get("tools", []):
+        # We store the tool as a 'potential solution' to a security diagnostic
+        diagnostic_trigger = {
+            "file": "network_audit",
+            "line": 0,
+            "message": f"Security Audit: {tool['category']}",
+            "tool": "kali_ingest"
+        }
+        
+        # The 'patch' in this context is the command-line usage pattern
+        db.add_example(
+            diagnostic=diagnostic_trigger, 
+            patch=f"Tool: {tool['name']}\nCommand: {tool['syntax']}\nPurpose: {tool['description']}",
+            metadata={"type": "offensive_security", "package": tool['name']}
+        )
+    print(f"Ingested {len(kali_repo['tools'])} Kali Linux tool definitions.")
+
+# Example Data Structure for 'kali_data.json':
+# {
+#   "tools": [
+#     {
+#       "name": "nmap",
+#       "category": "recon",
+#       "syntax": "nmap -sV -sC -O <target>",
+#       "description": "Service version detection and default script scanning."
+#     }
+#   ]
+# }
