@@ -1,188 +1,179 @@
 #!/usr/bin/python3
+"""
+Aegis-Nexus: Unified AI-Driven Ethical Hacking & Hardening Suite
+Integrates: Living Katoolin, System Hardener, and Offensive Recon
+"""
+
 import os
 import sys
 import json
 import subprocess
-import re
-import yaml
-import time
 import sqlite3
 import hashlib
 import tempfile
+import asyncio
+import aiohttp
+import nmap3
+import yaml
 from datetime import datetime
 from pathlib import Path
 
-# Note: Requires 'pip install GitPython PyYAML openai'
+# Required: pip install GitPython PyYAML openai python-nmap3 aiohttp
 try:
     from git import Repo
     import openai
 except ImportError:
-    print("Missing dependencies. Run: pip install GitPython PyYAML openai")
+    print("[!] Missing dependencies. Run: pip install GitPython PyYAML openai python-nmap3 aiohttp")
 
-class LivingKatoolin:
-    def __init__(self, config_path="config.yaml"):
-        self.sources_path = "/etc/apt/sources.list"
-        self.log_file = "assistant_learning.log"
+class AegisNexus:
+    def __init__(self, target="127.0.0.1", config_path="config.yaml"):
+        self.target = target
         self.config_path = Path(config_path)
+        self.log_file = "aegis_nexus.log"
         
-        # Load Config from YAML (from config 2.yaml)
+        # Load Configuration
         self.cfg = self._load_config()
         
-        # Knowledge Base (Memory)
-        self.knowledge_base = {
-            "recon": ["nmap", "dnsrecon", "theharvester"],
-            "web": ["sqlmap", "burpsuite", "wpscan"],
-            "wireless": ["aircrack-ng", "reaver", "wifite"],
+        # Unified Memory (Red/Blue/AI)
+        self.memory = {
+            "installed_tools": [],
+            "hardening_applied": False,
+            "last_recon": {},
             "repo_added": False
         }
         self._load_memory()
         
-        # Initialize Agent Components
+        # Database for AI Patches
         self.db_path = Path(self.cfg.get("knowledge_db", "./agent_data/knowledge.db"))
         self._ensure_db_table()
         
         if self.cfg.get("llm_provider") == "openai":
-            self._init_openai()
+            openai.api_key = os.getenv("OPENAI_API_KEY")
 
-    # --- CONFIG & MEMORY ---
+    # --- CORE UTILITIES ---
     def _load_config(self):
         if self.config_path.exists():
             with open(self.config_path, "r") as f:
                 return yaml.safe_load(f)
-        return {
-            "watch_path": "./target_project",
-            "llm_provider": "openai",
-            "llm_model": "gpt-4o-mini",
-            "dry_run": True,
-            "require_approval": True
-        }
+        return {"llm_provider": "openai", "llm_model": "gpt-4o-mini", "dry_run": False}
 
     def _load_memory(self):
         if os.path.exists("brain.json"):
             with open("brain.json", "r") as f:
-                self.knowledge_base.update(json.load(f))
+                self.memory.update(json.load(f))
 
     def _save_memory(self):
         with open("brain.json", "w") as f:
-            json.dump(self.knowledge_base, f)
+            json.dump(self.memory, f, indent=4)
 
-    # --- DATABASE OPERATIONS (from agent_knowledge) ---
     def _ensure_db_table(self):
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(str(self.db_path))
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS examples (
-                id TEXT PRIMARY KEY, diagnostic TEXT, patch TEXT, metadata TEXT
-            )
-        """)
+        conn.execute("CREATE TABLE IF NOT EXISTS examples (id TEXT PRIMARY KEY, diagnostic TEXT, patch TEXT, metadata TEXT)")
         conn.commit()
         conn.close()
 
-    def add_to_db(self, diagnostic_dict, patch, metadata=None):
-        conn = sqlite3.connect(str(self.db_path))
-        diag_json = json.dumps(diagnostic_dict)
-        mid = hashlib.sha256((diag_json + patch).encode("utf-8")).hexdigest()
-        conn.execute("INSERT OR IGNORE INTO examples VALUES (?, ?, ?, ?)",
-                    (mid, diag_json, patch, json.dumps(metadata or {})))
-        conn.commit()
-        conn.close()
+    def log(self, msg):
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(self.log_file, "a") as f:
+            f.write(f"[{ts}] {msg}\n")
+        print(f"[*] {msg}")
 
-    # --- LLM OPERATIONS (from agent_llm_client) ---
-    def _init_openai(self):
-        key = os.getenv("OPENAI_API_KEY")
-        if key:
-            openai.api_key = key
+    # --- BLUE TEAM: SYSTEM HARDENING ---
+    def harden_system(self):
+        if os.getuid() != 0:
+            return "Root required for hardening."
+        
+        self.log("Applying Kernel Hardening...")
+        params = {
+            "kernel.randomize_va_space": "2",
+            "net.ipv4.tcp_syncookies": "1",
+            "kernel.kptr_restrict": "2"
+        }
+        for p, v in params.items():
+            subprocess.run(["sysctl", "-w", f"{p}={v}"], capture_output=True)
+            
+        self.log("Configuring nftables Default-Deny...")
+        fw_cmds = [
+            "nft flush ruleset",
+            "nft add table inet filter",
+            "nft add chain inet filter input { type filter hook input priority 0 ; policy drop ; }",
+            "nft add rule inet filter input ct state established,related accept"
+        ]
+        for cmd in fw_cmds:
+            subprocess.run(cmd, shell=True)
+        
+        self.memory["hardening_applied"] = True
+        self._save_memory()
+        return "System Hardened."
 
-    def get_llm_fix(self, prompt):
+    # --- RED TEAM: OFFENSIVE RECON ---
+    async def run_recon(self):
+        self.log(f"Starting Recon on {self.target}...")
+        nmap = nmap3.NmapHostDiscovery()
+        results = nmap.nmap_portscan_only(self.target)
+        
+        # Check for Web Vulnerabilities
+        async with aiohttp.ClientSession() as session:
+            for path in ["/.env", "/api/v1/debug?cmd=id"]:
+                try:
+                    async with session.get(f"http://{self.target}{path}", timeout=2) as resp:
+                        if resp.status == 200:
+                            self.log(f"ALERT: Exposed path found: {path}")
+                except: continue
+        
+        self.memory["last_recon"] = results
+        self._save_memory()
+        return "Recon Complete."
+
+    # --- AI AGENT: SELF-REPAIR & PATCHING ---
+    def get_ai_fix(self, error_report):
+        prompt = f"Fix this code error in unified diff format:\n{error_report}"
         try:
             resp = openai.ChatCompletion.create(
-                model=self.cfg.get("llm_model", "gpt-4o-mini"),
-                messages=[{"role": "system", "content": "You are a helpful code assistant."},
-                          {"role": "user", "content": prompt}],
-                temperature=0.0
+                model=self.cfg.get("llm_model"),
+                messages=[{"role": "user", "content": prompt}]
             )
-            text = resp["choices"][0]["message"]["content"]
-            return None if "NO_PATCH" in text else text
+            return resp["choices"][0]["message"]["content"]
         except Exception as e:
-            self.log_action(f"LLM Error: {e}")
-            return None
+            return f"AI Error: {e}"
 
-    # --- PATCHING LOGIC (from agent_patcher) ---
-    def apply_patch(self, patch_text, file_path):
-        print(f"\n[!] Suggested patch for {file_path}:")
-        print(patch_text[:500] + "...")
-
-        if self.cfg.get("dry_run"):
-            return "Dry run enabled. No changes made."
-
-        ans = input("Apply this AI patch? (y/N): ").strip().lower()
-        if ans != 'y': return "Patch rejected."
-
+    def apply_patch(self, patch_text):
         with tempfile.NamedTemporaryFile(mode="w+", delete=False) as tf:
             tf.write(patch_text)
             tf.flush()
-            try:
-                subprocess.run(["git", "apply", tf.name], check=True)
-                self.log_action(f"Applied patch to {file_path}")
-                return "Patch applied successfully."
-            except Exception as e:
-                return f"Patch failed: {e}"
+            subprocess.run(["git", "apply", tf.name])
+        return "Patch Applied."
 
-    # --- SYSTEM ACTIONS ---
-    def execute(self, cmd):
+    # --- INTERFACE ---
+    async def process_cmd(self, cmd):
+        cmd = cmd.lower()
+        if "harden" in cmd: return self.harden_system()
+        if "recon" in cmd: return await self.run_recon()
+        if "analyze" in cmd:
+            issue = subprocess.run(["flake8", "."], capture_output=True, text=True).stdout
+            if not issue: return "No local code issues."
+            fix = self.get_ai_fix(issue)
+            return self.apply_patch(fix)
+        if "install" in cmd:
+            tool = cmd.split("install ")[-1]
+            subprocess.run(["apt", "install", "-y", tool])
+            self.memory["installed_tools"].append(tool)
+            self._save_memory()
+            return f"Installed {tool}."
+        
+        return "Commands: harden, recon, analyze, install [tool], exit"
+
+async def main_loop():
+    nexus = AegisNexus()
+    print("\033[1;32m[Aegis-Nexus] Unified AI Security Suite Online.\033[0m")
+    while True:
         try:
-            print(f"\033[1;33m[Executing]: {cmd}\033[1;m")
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-            return result.stdout
-        except Exception as e:
-            return str(e)
-
-    def log_action(self, action):
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        with open(self.log_file, "a") as f:
-            f.write(f"[{timestamp}] {action}\n")
-
-    # --- NATURAL LANGUAGE INTERFACE ---
-    def process_natural_language(self, user_input):
-        user_input = user_input.lower()
-        
-        # Self-Repair/Analyze Mode
-        if "analyze" in user_input or "fix" in user_input:
-            target = self.cfg.get("watch_path", ".")
-            return self.run_self_analysis(target)
-
-        # Standard Katoolin Logic
-        if "setup" in user_input:
-            return "Setting up repos..." # Add your setup logic here
-        
-        if "install" in user_input:
-            words = user_input.split()
-            tool = words[words.index("install") + 1] if "install" in words else "unknown"
-            return f"Installing {tool}..." # Add your install logic here
-
-        return "Commands: 'analyze', 'fix code', 'install [tool]', 'setup repos'"
-
-    def run_self_analysis(self, path):
-        """Runs flake8/checks and asks LLM for fixes (Integrated Analyzer)"""
-        print(f"Scanning {path} for issues...")
-        # Simple flake8 check
-        result = self.execute(f"flake8 {path}")
-        if not result:
-            return "No issues found by analyzer."
-        
-        # Build prompt for the first issue found
-        prompt = f"Fix the following error in a unified diff format:\n{result}"
-        suggestion = self.get_llm_fix(prompt)
-        
-        if suggestion:
-            return self.apply_patch(suggestion, path)
-        return "LLM could not find a fix."
+            query = input("\033[1;36mNexus > \033[0m")
+            if query.lower() in ["exit", "quit"]: break
+            response = await nexus.process_cmd(query)
+            print(f"[-] {response}")
+        except KeyboardInterrupt: break
 
 if __name__ == "__main__":
-    assistant = LivingKatoolin()
-    print("\033[1;32mLiving Katoolin + AI Agent Online.\033[1;m")
-    
-    while True:
-        query = input("\033[1;36m[Living-AI] > \033[1;m")
-        if query.lower() in ["exit", "quit"]: break
-        print(assistant.process_natural_language(query))
+    asyncio.run(main_loop())
