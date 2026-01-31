@@ -1,0 +1,18 @@
+# Path to the project the agent will monitor or analyze
+watch_path: "./target_project"
+
+# Operational settings
+poll_interval: 1.0
+dry_run: true                  # Set to false to allow actual code changes
+auto_apply: false              # Whether to apply patches without asking
+require_approval: true         # Always ask before applying a patch
+
+# LLM Configuration
+llm_provider: "openai"         # Currently supports "openai"
+llm_model: "gpt-4o-mini"       # The model used for generating fixes
+max_patch_lines: 500           # Limit on how large a fix can be
+
+# Storage and Git identity
+knowledge_db: "./agent_data/knowledge.db"
+git_author_name: "ai-agent"
+git_author_email: "ai-agent@example.local"
